@@ -1,15 +1,121 @@
-name: build and Publish image to docker hub
+name: Deploy Flask App to EC2
+
+
+
 on:
-  [workflow_dispatch]
+
+  push:
+
+    branches:
+
+      - main
+
+
 
 jobs:
-  publish_images:
+
+  deploy:
+
     runs-on: ubuntu-latest
+
+
+
     steps:
-      - name: checkout
-        uses: actions/checkout@v
-      - name: build image
-        run: docker build ./DockerToECS/ -t iamhardeep22/devops-credit:latest
-      - name: push image
-        run: docker login -u iamhardeep22 -p ${{ secrets.DOCKER_HUB_TOKEN }} 
-          docker push iamhardeep22/devops-credit:latest
+
+    - name: 📥 Checkout code
+
+      uses: actions/checkout@v3
+
+
+
+    - name: 🔐 Setup SSH
+
+      run: |
+
+        mkdir -p ~/.ssh
+
+        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+
+        chmod 600 ~/.ssh/id_rsa
+
+
+
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+
+
+    - name: 🚀 Deploy to EC2
+
+      run: |
+
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+
+
+
+        echo "Connected to EC2"
+
+
+
+        APP_DIR=~/credit-app
+
+
+
+        # Clone repo first time or update
+
+        if [ ! -d "$APP_DIR" ]; then
+
+          git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git $APP_DIR
+
+        fi
+
+
+
+        cd $APP_DIR
+
+
+
+        git fetch origin
+
+        git reset --hard origin/main
+
+
+
+        # Setup Python environment
+
+        if [ ! -d "venv" ]; then
+
+          python3 -m venv venv
+
+        fi
+
+
+
+        source venv/bin/activate
+
+
+
+        # Install dependencies
+
+        pip install --upgrade pip
+
+        pip install -r requirements.txt
+
+
+
+        # Stop previous app
+
+        pkill -f gunicorn || true
+
+
+
+        # Start Flask app (serving templates + model)
+
+        nohup gunicorn appnew:app --bind 0.0.0.0:8000 > app.log 2>&1 &
+
+
+
+        echo "Deployment successful"
+
+
+
+        EOF
